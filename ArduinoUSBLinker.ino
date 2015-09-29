@@ -1,3 +1,5 @@
+#include <SoftwareSerial.h>
+
 /*
 Copyright (C) 2012-2013 Chris Osgood <chris at luadev.com>
 
@@ -272,6 +274,12 @@ static void SignalPinStatus(char* buf)
     *pos++ = #x[0]; \
     pos = AUL_itoa(pincnt, pos); \
     *pos++ = ':'; \
+    pos = AUL_itoa(PORT##x, pos); \
+    *pos++ = ':'; \
+    pos = AUL_itoa(DDR##x, pos); \
+    *pos++ = ':'; \
+    pos = AUL_itoa(PIN##x, pos); \
+    *pos++ = ':'; \
     pincnt += 8;
 
   char* pos = buf;
@@ -325,7 +333,7 @@ static void SignalPinStatus(char* buf)
   *pos = '\0';
 }
 
-static void SignalPinInit(int8_t pin)
+static void SignalPinInit(int8_t pin, int pull)
 {
   #define AUL_SETUP_PORT(x) \
     if (pin < (pincnt += 8)) \
@@ -379,9 +387,14 @@ static void SignalPinInit(int8_t pin)
     AUL_SETUP_PORT(A);
   #endif
 
-finished:  
-  AUL_PINHIGH; // Enable pull-up
-  AUL_PININPUT;
+finished:
+  if (pull) {
+    AUL_PINHIGH; // Enable pull-up
+    AUL_PININPUT;
+  } else {
+    AUL_PININPUT;
+    AUL_PINLOW; // Disable pull-up
+  }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -569,7 +582,7 @@ void AUL_loop(uint8_t port)
       EEWrite32(AUL_EEPROM_BAUD, AUL_SERIALRATE);
     }
 
-    SignalPinInit(EEPROM.read(AUL_EEPROM_PIN));  
+    SignalPinInit(EEPROM.read(AUL_EEPROM_PIN), 1);  
     SetBitTime(EEPROM.read(AUL_EEPROM_BITTIME));
 
     g_baudRate = EERead32(AUL_EEPROM_BAUD);
@@ -627,7 +640,8 @@ void AUL_loop(uint8_t port)
           SetBitTime(AUL_atoi((const char*)&buf[7]));
           break; }
         case 'P': // SELECT PORT
-          SignalPinInit(AUL_atoi((const char*)&buf[7]));
+          SignalPinInit(g_signalPinNum, 0);
+          SignalPinInit(AUL_atoi((const char*)&buf[7]), 1);
           break;
 #if !defined(MULTIWII)
         case 'R': // BAUD RATE
